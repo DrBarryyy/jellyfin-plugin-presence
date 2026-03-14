@@ -1,26 +1,14 @@
-using System.Threading.Tasks;
-using MediaBrowser.Controller.Library;
+using MediaBrowser.Controller;
 using MediaBrowser.Controller.Plugins;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Jellyfin.Plugin.Presence;
 
-public class PresenceEntryPoint : IServerEntryPoint
+public class PresenceServiceRegistrator : IPluginServiceRegistrator
 {
-    private readonly PresenceManager _manager;
-
-    public PresenceEntryPoint(IUserManager userManager)
+    public void RegisterServices(IServiceCollection serviceCollection, IServerApplicationHost applicationHost)
     {
-        _manager = new PresenceManager(userManager);
-    }
-
-    public Task RunAsync()
-    {
-        _manager.Start();
-        return Task.CompletedTask;
-    }
-
-    public void Dispose()
-    {
-        _manager.Dispose();
+        serviceCollection.AddSingleton<PresenceManager>();
+        serviceCollection.AddHostedService(sp => sp.GetRequiredService<PresenceManager>());
     }
 }

@@ -6,10 +6,11 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Channels;
 using MediaBrowser.Controller.Library;
+using Microsoft.Extensions.Hosting;
 
 namespace Jellyfin.Plugin.Presence;
 
-public class PresenceManager : IDisposable
+public class PresenceManager : IHostedService, IDisposable
 {
     private static readonly TimeSpan OfflineTimeout = TimeSpan.FromSeconds(30);
 
@@ -27,7 +28,7 @@ public class PresenceManager : IDisposable
         Instance = this;
     }
 
-    public void Start()
+    public Task StartAsync(CancellationToken cancellationToken)
     {
         foreach (var user in _userManager.Users)
         {
@@ -40,6 +41,13 @@ public class PresenceManager : IDisposable
         }
 
         _cleanupTimer = new Timer(CheckTimeouts, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+        return Task.CompletedTask;
+    }
+
+    public Task StopAsync(CancellationToken cancellationToken)
+    {
+        _cleanupTimer?.Change(Timeout.Infinite, 0);
+        return Task.CompletedTask;
     }
 
     public void Heartbeat(Guid userId, string username, bool isActive)

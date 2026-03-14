@@ -1,11 +1,7 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
 using System.Reflection;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Jellyfin.Plugin.Presence.Api;
@@ -14,16 +10,17 @@ namespace Jellyfin.Plugin.Presence.Api;
 [Route("api/[controller]")]
 public class PresenceController : ControllerBase
 {
+    private readonly PresenceManager _manager;
+
+    public PresenceController(PresenceManager manager)
+    {
+        _manager = manager;
+    }
+
     [HttpPost("Heartbeat")]
     [Authorize]
     public ActionResult Heartbeat([FromBody] HeartbeatRequest request)
     {
-        var manager = PresenceManager.Instance;
-        if (manager == null)
-        {
-            return StatusCode(503);
-        }
-
         var userIdClaim = User.FindFirst("Jellyfin-UserId")?.Value
             ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
@@ -36,7 +33,7 @@ public class PresenceController : ControllerBase
             ?? User.Identity?.Name
             ?? "Unknown";
 
-        manager.Heartbeat(userId, username, request.IsActive);
+        _manager.Heartbeat(userId, username, request.IsActive);
         return Ok();
     }
 
@@ -44,36 +41,22 @@ public class PresenceController : ControllerBase
     [Authorize]
     public ActionResult<List<UserPresenceInfo>> GetUsers()
     {
-        var manager = PresenceManager.Instance;
-        if (manager == null)
-        {
-            return StatusCode(503);
-        }
-
-        return Ok(manager.GetAll());
+        return Ok(_manager.GetAll());
     }
 
     [HttpGet("Events")]
     [Authorize]
     public async Task GetEvents(CancellationToken cancellationToken)
     {
-        var manager = PresenceManager.Instance;
-        if (manager == null)
-        {
-            Response.StatusCode = 503;
-            return;
-        }
-
         Response.Headers.ContentType = "text/event-stream";
         Response.Headers.CacheControl = "no-cache";
         Response.Headers["X-Accel-Buffering"] = "no";
 
-        // Send initial state immediately
-        var initial = JsonSerializer.Serialize(manager.GetAll());
+        var initial = JsonSerializer.Serialize(_manager.GetAll());
         await Response.WriteAsync($"data: {initial}\n\n", cancellationToken);
         await Response.Body.FlushAsync(cancellationToken);
 
-        var (reader, writer) = manager.Subscribe();
+        var (reader, writer) = _manager.Subscribe();
         try
         {
             await foreach (var data in reader.ReadAllAsync(cancellationToken))
@@ -84,7 +67,7 @@ public class PresenceController : ControllerBase
         }
         finally
         {
-            manager.Unsubscribe(writer);
+            _manager.Unsubscribe(writer);
         }
     }
 

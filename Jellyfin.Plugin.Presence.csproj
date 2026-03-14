@@ -5,11 +5,13 @@
     <RootNamespace>Jellyfin.Plugin.Presence</RootNamespace>
     <AssemblyVersion>1.0.0</AssemblyVersion>
     <FileVersion>1.0.0</FileVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Jellyfin.Controller" Version="10.10.*" />
+    <PackageReference Include="Jellyfin.Controller" Version="10.10.6" />
   </ItemGroup>
 
   <ItemGroup>
