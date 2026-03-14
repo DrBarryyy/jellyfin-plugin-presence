@@ -218,6 +218,12 @@
 .presence-user:hover {\
     background: rgba(255, 255, 255, 0.05);\
 }\
+.presence-avatar-wrap {\
+    position: relative;\
+    flex-shrink: 0;\
+    width: 32px;\
+    height: 32px;\
+}\
 .presence-avatar {\
     width: 32px;\
     height: 32px;\
@@ -229,8 +235,19 @@
     font-size: 13px;\
     font-weight: 600;\
     color: #ccc;\
-    position: relative;\
-    flex-shrink: 0;\
+    overflow: hidden;\
+}\
+.presence-avatar img {\
+    width: 100%;\
+    height: 100%;\
+    object-fit: cover;\
+}\
+.presence-initial {\
+    width: 100%;\
+    height: 100%;\
+    display: flex;\
+    align-items: center;\
+    justify-content: center;\
 }\
 .presence-dot {\
     position: absolute;\
@@ -240,6 +257,7 @@
     height: 10px;\
     border-radius: 50%;\
     border: 2px solid rgba(16, 16, 20, 0.95);\
+    z-index: 1;\
 }\
 .presence-dot.online {\
     background: #43b581;\
@@ -375,9 +393,12 @@
             users.forEach(function (user) {
                 var initial = (user.Username || '?')[0].toUpperCase();
                 var stateClass = state.toLowerCase();
+                var imgUrl = window.location.origin + '/Users/' + user.UserId + '/Images/Primary?quality=90&height=64';
+                var avatarContent = '<img src="' + imgUrl + '" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'flex\'">'
+                    + '<span class="presence-initial" style="display:none">' + initial + '</span>';
                 html += '<div class="presence-user">'
-                    + '<div class="presence-avatar">'
-                    + initial
+                    + '<div class="presence-avatar-wrap">'
+                    + '<div class="presence-avatar">' + avatarContent + '</div>'
                     + '<span class="presence-dot ' + stateClass + '"></span>'
                     + '</div>'
                     + '<span class="presence-name ' + stateClass + '">' + escapeHtml(user.Username) + '</span>'
