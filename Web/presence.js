@@ -53,11 +53,26 @@
         }
     });
 
+    // Detect logout instantly by intercepting fetch to /Sessions/Logout
+    var originalFetch = window.fetch;
+    window.fetch = function () {
+        var url = arguments[0];
+        var opts = arguments[1] || {};
+        if (typeof url === 'string' && url.indexOf('/Sessions/Logout') !== -1 && (opts.method || '').toUpperCase() === 'POST') {
+            teardown();
+        }
+        return originalFetch.apply(this, arguments);
+    };
+
     // ── Heartbeat ──
 
     function sendHeartbeat() {
         var headers = getHeaders();
-        if (!headers) return;
+        if (!headers) {
+            // Credentials gone (logged out) — tear down and wait for re-login
+            teardown();
+            return;
+        }
 
         var isActive = !document.hidden && (Date.now() - lastActivity < IDLE_TIMEOUT);
 
@@ -66,6 +81,34 @@
             headers: headers,
             body: JSON.stringify({ IsActive: isActive })
         }).catch(function () { });
+    }
+
+    function teardown() {
+        // Stop heartbeat
+        if (heartbeatTimer) {
+            clearInterval(heartbeatTimer);
+            heartbeatTimer = null;
+        }
+
+        // Kill SSE connection
+        if (sseController) {
+            sseController.abort();
+            sseController = null;
+        }
+
+        // Remove sidebar UI
+        var sidebar = document.getElementById('presence-sidebar');
+        var toggle = document.getElementById('presence-toggle');
+        if (sidebar) sidebar.remove();
+        if (toggle) toggle.remove();
+
+        // Clear state
+        currentUsers = [];
+        sidebarOpen = false;
+        window.__presenceInitialized = false;
+
+        // Poll for re-login
+        setTimeout(init, 2000);
     }
 
     // ── SSE Stream (using fetch + ReadableStream for auth header support) ──
