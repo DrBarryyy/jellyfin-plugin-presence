@@ -67,10 +67,16 @@ public class PresenceManager : IHostedService, IDisposable
             },
             (_, existing) =>
             {
-                var oldState = existing.State;
                 existing.LastHeartbeat = now;
-                existing.State = newState;
                 existing.Username = username;
+                if (existing.IsDnd)
+                {
+                    existing.State = PresenceState.DoNotDisturb;
+                }
+                else
+                {
+                    existing.State = newState;
+                }
                 if (isActive)
                 {
                     existing.LastActive = now;
@@ -80,6 +86,16 @@ public class PresenceManager : IHostedService, IDisposable
             });
 
         Broadcast();
+    }
+
+    public void SetDnd(Guid userId, bool enabled)
+    {
+        if (_presenceMap.TryGetValue(userId, out var info))
+        {
+            info.IsDnd = enabled;
+            info.State = enabled ? PresenceState.DoNotDisturb : PresenceState.Online;
+            Broadcast();
+        }
     }
 
     public List<UserPresenceInfo> GetAll()
@@ -154,6 +170,7 @@ public class PresenceManager : IHostedService, IDisposable
             if (now - info.LastHeartbeat > OfflineTimeout)
             {
                 info.State = PresenceState.Offline;
+                info.IsDnd = false;
                 changed = true;
             }
         }

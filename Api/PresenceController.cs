@@ -37,6 +37,22 @@ public class PresenceController : ControllerBase
         return Ok();
     }
 
+    [HttpPost("Dnd")]
+    [Authorize]
+    public ActionResult SetDnd([FromBody] SetDndRequest request)
+    {
+        var userIdClaim = User.FindFirst("Jellyfin-UserId")?.Value
+            ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+        {
+            return Unauthorized();
+        }
+
+        _manager.SetDnd(userId, request.Enabled);
+        return Ok();
+    }
+
     [HttpGet("Users")]
     [Authorize]
     public ActionResult<List<UserPresenceInfo>> GetUsers()
@@ -77,6 +93,20 @@ public class PresenceController : ControllerBase
     {
         var assembly = Assembly.GetExecutingAssembly();
         var stream = assembly.GetManifestResourceStream("Jellyfin.Plugin.Presence.Web.presence.js");
+        if (stream == null)
+        {
+            return NotFound();
+        }
+
+        return File(stream, "application/javascript");
+    }
+
+    [HttpGet("CommentsScript")]
+    [AllowAnonymous]
+    public ActionResult GetCommentsScript()
+    {
+        var assembly = Assembly.GetExecutingAssembly();
+        var stream = assembly.GetManifestResourceStream("Jellyfin.Plugin.Presence.Web.comments.js");
         if (stream == null)
         {
             return NotFound();

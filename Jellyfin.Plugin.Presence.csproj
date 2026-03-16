@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net9.0</TargetFramework>
     <RootNamespace>Jellyfin.Plugin.Presence</RootNamespace>
     <AssemblyVersion>1.0.0</AssemblyVersion>
     <FileVersion>1.0.0</FileVersion>
@@ -11,11 +11,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Jellyfin.Controller" Version="10.10.6" />
+    <PackageReference Include="Jellyfin.Controller" Version="10.11.6" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.*" />
   </ItemGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="Web\presence.js" />
+    <EmbeddedResource Include="Web\comments.js" />
   </ItemGroup>
 
 </Project>

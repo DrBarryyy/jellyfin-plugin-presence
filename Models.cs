@@ -7,6 +7,7 @@ public enum PresenceState
 {
     Online,
     Idle,
+    DoNotDisturb,
     Offline
 }
 
@@ -19,6 +20,9 @@ public class UserPresenceInfo
     public PresenceState State { get; set; }
 
     [JsonIgnore]
+    public bool IsDnd { get; set; }
+
+    [JsonIgnore]
     public DateTime LastHeartbeat { get; set; }
 
     [JsonIgnore]
@@ -28,4 +32,9 @@ public class UserPresenceInfo
 public class HeartbeatRequest
 {
     public bool IsActive { get; set; }
+}
+
+public class SetDndRequest
+{
+    public bool Enabled { get; set; }
 }

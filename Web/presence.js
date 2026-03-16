@@ -268,6 +268,15 @@
 .presence-dot.offline {\
     background: #555;\
 }\
+.presence-dot.donotdisturb {\
+    background: #ed4245;\
+}\
+.presence-user.is-self {\
+    cursor: pointer;\
+}\
+.presence-user.is-self:hover {\
+    background: rgba(255, 255, 255, 0.08);\
+}\
 .presence-name {\
     font-size: 14px;\
     white-space: nowrap;\
@@ -327,6 +336,7 @@
     }
 
     function createSidebar() {
+        if (document.getElementById('presence-sidebar')) return;
         injectStyles();
 
         // Toggle button
@@ -369,34 +379,39 @@
         var list = document.getElementById('presence-list');
         if (!list) return;
 
-        var groups = { Online: [], Idle: [], Offline: [] };
+        var creds = getCredentials();
+        var myUserId = creds ? creds.userId : null;
+
+        var groups = { Online: [], Idle: [], DoNotDisturb: [], Offline: [] };
         currentUsers.forEach(function (user) {
             groups[user.State] = groups[user.State] || [];
             groups[user.State].push(user);
         });
 
-        var onlineCount = (groups.Online || []).length + (groups.Idle || []).length;
+        var onlineCount = (groups.Online || []).length + (groups.Idle || []).length + (groups.DoNotDisturb || []).length;
         var badge = document.getElementById('presence-badge');
         if (badge) {
             badge.textContent = onlineCount;
             badge.style.display = onlineCount > 0 ? 'flex' : 'none';
         }
 
+        var stateLabels = { Online: 'Online', Idle: 'Idle', DoNotDisturb: 'Do Not Disturb', Offline: 'Offline' };
         var html = '';
-        var order = ['Online', 'Idle', 'Offline'];
+        var order = ['Online', 'Idle', 'DoNotDisturb', 'Offline'];
         order.forEach(function (state) {
             var users = groups[state] || [];
             if (users.length === 0) return;
 
             html += '<div class="presence-group">';
-            html += '<div class="presence-group-label">' + state + ' \u2014 ' + users.length + '</div>';
+            html += '<div class="presence-group-label">' + stateLabels[state] + ' \u2014 ' + users.length + '</div>';
             users.forEach(function (user) {
                 var initial = (user.Username || '?')[0].toUpperCase();
                 var stateClass = state.toLowerCase();
+                var isSelf = myUserId && user.UserId.replace(/-/g, '') === myUserId.replace(/-/g, '');
                 var imgUrl = window.location.origin + '/Users/' + user.UserId + '/Images/Primary?quality=90&height=64';
                 var avatarContent = '<img src="' + imgUrl + '" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'flex\'">'
                     + '<span class="presence-initial" style="display:none">' + initial + '</span>';
-                html += '<div class="presence-user">'
+                html += '<div class="presence-user' + (isSelf ? ' is-self' : '') + '" data-userid="' + user.UserId + '">'
                     + '<div class="presence-avatar-wrap">'
                     + '<div class="presence-avatar">' + avatarContent + '</div>'
                     + '<span class="presence-dot ' + stateClass + '"></span>'
@@ -408,12 +423,58 @@
         });
 
         list.innerHTML = html;
+
+        // Click own profile to toggle DND
+        list.querySelectorAll('.presence-user.is-self').forEach(function (el) {
+            el.addEventListener('click', function () {
+                var headers = getHeaders();
+                if (!headers) return;
+                // Check current state from the dot
+                var dot = el.querySelector('.presence-dot');
+                var isDnd = dot && dot.classList.contains('donotdisturb');
+                fetch(API_BASE + '/Dnd', {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify({ Enabled: !isDnd })
+                }).catch(function () {});
+            });
+        });
     }
 
     function escapeHtml(str) {
         var div = document.createElement('div');
         div.textContent = str;
         return div.innerHTML;
+    }
+
+    // ── Playback Visibility ──
+
+    function watchPlayback() {
+        var toggle = document.getElementById('presence-toggle');
+        var sidebar = document.getElementById('presence-sidebar');
+
+        var observer = new MutationObserver(function () {
+            var playing = document.querySelector('.videoPlayerContainer, video, .htmlvideoplayer');
+            var isFullscreen = document.fullscreenElement || document.querySelector('.itemVideo');
+            var hide = !!(playing || isFullscreen);
+
+            if (toggle) toggle.style.display = hide ? 'none' : '';
+            if (sidebar && hide) {
+                sidebar.classList.remove('open');
+                sidebarOpen = false;
+            }
+        });
+
+        observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+
+        document.addEventListener('fullscreenchange', function () {
+            var hide = !!document.fullscreenElement;
+            if (toggle) toggle.style.display = hide ? 'none' : '';
+            if (sidebar && hide) {
+                sidebar.classList.remove('open');
+                sidebarOpen = false;
+            }
+        });
     }
 
     // ── Init ──
@@ -426,11 +487,16 @@
         }
 
         createSidebar();
-        fetchUsers();
-        connectSSE();
+        watchPlayback();
         sendHeartbeat();
         heartbeatTimer = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL);
+        // Fetch users after heartbeat has registered us
+        setTimeout(fetchUsers, 1000);
+        connectSSE();
     }
+
+    if (window.__presenceInitialized) return;
+    window.__presenceInitialized = true;
 
     if (document.readyState === 'complete' || document.readyState === 'interactive') {
         setTimeout(init, 500);
