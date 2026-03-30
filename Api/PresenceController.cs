@@ -114,4 +114,18 @@ public class PresenceController : ControllerBase
 
         return File(stream, "application/javascript");
     }
+
+    [HttpGet("RequestsScript")]
+    [AllowAnonymous]
+    public ActionResult GetRequestsScript()
+    {
+        var assembly = Assembly.GetExecutingAssembly();
+        var stream = assembly.GetManifestResourceStream("Jellyfin.Plugin.Presence.Web.requests.js");
+        if (stream == null)
+        {
+            return NotFound();
+        }
+
+        return File(stream, "application/javascript");
+    }
 }

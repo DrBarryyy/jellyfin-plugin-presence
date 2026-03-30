@@ -11,6 +11,8 @@ public class PresenceServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<PresenceManager>();
         serviceCollection.AddHostedService(sp => sp.GetRequiredService<PresenceManager>());
         serviceCollection.AddSingleton<CommentStore>();
+        serviceCollection.AddSingleton<RequestStore>();
+        serviceCollection.AddHostedService<RequestManager>();
         serviceCollection.AddHostedService<ScriptInjector>();
     }
 }

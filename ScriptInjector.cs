@@ -9,7 +9,8 @@ public class ScriptInjector : IHostedService
 {
     private const string ScriptTag =
         "<script plugin=\"Presence\" src=\"/api/Presence/Script\" defer></script>"
-        + "<script plugin=\"Presence\" src=\"/api/Presence/CommentsScript\" defer></script>";
+        + "<script plugin=\"Presence\" src=\"/api/Presence/CommentsScript\" defer></script>"
+        + "<script plugin=\"Presence\" src=\"/api/Presence/RequestsScript\" defer></script>";
 
     private readonly IServerApplicationHost _appHost;
     private readonly ILogger<ScriptInjector> _logger;
@@ -60,8 +61,8 @@ public class ScriptInjector : IHostedService
 
             var html = File.ReadAllText(indexPath);
 
-            // Remove any old injections
-            html = Regex.Replace(html, @"<script plugin=""Presence""[^>]*></script>", string.Empty);
+            // Remove any old injections (with or without quoted attributes)
+            html = Regex.Replace(html, @"<script plugin=""?Presence""?[^>]*></script>", string.Empty);
 
             // Inject before </body>
             if (html.Contains("</body>"))

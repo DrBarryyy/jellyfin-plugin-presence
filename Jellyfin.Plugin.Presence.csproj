@@ -18,6 +18,7 @@
   <ItemGroup>
     <EmbeddedResource Include="Web\presence.js" />
     <EmbeddedResource Include="Web\comments.js" />
+    <EmbeddedResource Include="Web\requests.js" />
   </ItemGroup>
 
 </Project>

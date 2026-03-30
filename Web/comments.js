@@ -858,6 +858,12 @@
             var playerContainer = document.querySelector('.videoPlayerContainer');
             if (!playerContainer) return;
 
+            // Skip remote/Chromecast playback — no local <video> element means
+            // content is being cast to another device; injecting the comments
+            // layout would break the remote-control UI.
+            var video = playerContainer.querySelector('video') || document.querySelector('video');
+            if (!video) return;
+
             // Phase 1: Show skeleton layout immediately when player container appears
             if (!skeletonShown && !commentsInjected) {
                 showSkeletonLayout();
