@@ -14,6 +14,10 @@ public class RequestManager : IHostedService, IDisposable
     private readonly ILibraryManager _libraryManager;
     private readonly RequestStore _requestStore;
     private readonly ILogger<RequestManager> _logger;
+    private Timer? _scanTimer;
+
+    private static readonly TimeSpan InitialDelay = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan ScanInterval = TimeSpan.FromMinutes(5);
 
     public RequestManager(ILibraryManager libraryManager, RequestStore requestStore, ILogger<RequestManager> logger)
     {
@@ -26,8 +30,8 @@ public class RequestManager : IHostedService, IDisposable
     {
         _libraryManager.ItemAdded += OnItemAdded;
 
-        // Scan all pending requests against existing library on startup
-        Task.Run(() => ScanAll(), cancellationToken);
+        // Delay the first scan to let the library finish loading, then repeat periodically
+        _scanTimer = new Timer(_ => ScanAll(), null, InitialDelay, ScanInterval);
 
         return Task.CompletedTask;
     }
@@ -35,6 +39,7 @@ public class RequestManager : IHostedService, IDisposable
     public Task StopAsync(CancellationToken cancellationToken)
     {
         _libraryManager.ItemAdded -= OnItemAdded;
+        _scanTimer?.Change(Timeout.Infinite, 0);
         return Task.CompletedTask;
     }
 
@@ -110,5 +115,6 @@ public class RequestManager : IHostedService, IDisposable
 
     public void Dispose()
     {
+        _scanTimer?.Dispose();
     }
 }

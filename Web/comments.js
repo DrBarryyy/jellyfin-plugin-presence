@@ -8,6 +8,15 @@
     var commentsInjected = false;
     var pendingMediaId = null;
 
+    // ── Live overlay state ──
+    var overlayActive = false;
+    var overlayPanel = null;
+    var overlayComments = [];       // cached comments for current media
+    var overlayShownIds = {};       // comment IDs already spawned
+    var overlayRenderTimer = null;
+    var overlayBubbleTimers = [];   // per-bubble TTL timeout IDs
+    var OVERLAY_TTL = 10000;        // 10 seconds per bubble
+
     // ── Auth ──
 
     function getCredentials() {
@@ -409,6 +418,83 @@
     border-radius: 6px;\
     flex-shrink: 0;\
 }\
+.comments-overlay-toggle {\
+    display: inline-flex;\
+    align-items: center;\
+    justify-content: center;\
+    background: none;\
+    border: none;\
+    color: rgba(255,255,255,0.5);\
+    cursor: pointer;\
+    padding: 6px;\
+    margin: 0 2px;\
+    transition: color 0.2s;\
+    vertical-align: middle;\
+}\
+.comments-overlay-toggle:hover {\
+    color: rgba(255,255,255,0.85);\
+}\
+.comments-overlay-toggle.active {\
+    color: #00a4dc;\
+}\
+.comments-overlay-toggle svg {\
+    width: 24px;\
+    height: 24px;\
+    fill: currentColor;\
+}\
+.comments-overlay-panel {\
+    position: absolute;\
+    top: 0;\
+    right: 0;\
+    bottom: 80px;\
+    width: 35%;\
+    min-width: 200px;\
+    max-width: 400px;\
+    display: flex;\
+    flex-direction: column;\
+    justify-content: flex-end;\
+    overflow: hidden;\
+    pointer-events: none;\
+    z-index: 99998;\
+    padding: 8px;\
+    background: linear-gradient(to right, transparent 0%, rgba(0,0,0,0.35) 30%, rgba(0,0,0,0.5) 100%);\
+}\
+.comments-overlay-bubble {\
+    padding: 6px 10px;\
+    margin-top: 4px;\
+    background: rgba(0,0,0,0.45);\
+    border-radius: 12px;\
+    color: #fff;\
+    font-size: 13px;\
+    line-height: 1.3;\
+    pointer-events: none;\
+    opacity: 0;\
+    transform: translateX(40px);\
+    animation: overlay-slide-in 0.35s ease forwards;\
+    transition: opacity 0.6s ease, transform 0.3s ease;\
+    flex-shrink: 0;\
+    text-shadow: 0 1px 3px rgba(0,0,0,0.6);\
+    word-wrap: break-word;\
+    max-width: 100%;\
+}\
+.comments-overlay-bubble.fade-out {\
+    opacity: 0 !important;\
+    transform: translateX(-10px);\
+}\
+.comments-overlay-bubble-user {\
+    font-weight: 600;\
+    font-size: 11px;\
+    color: #00a4dc;\
+    margin-bottom: 1px;\
+}\
+.comments-overlay-bubble-text {\
+    font-size: 13px;\
+    color: rgba(255,255,255,0.95);\
+}\
+@keyframes overlay-slide-in {\
+    0% { opacity: 0; transform: translateX(40px); }\
+    100% { opacity: 1; transform: translateX(0); }\
+}\
 ';
         document.head.appendChild(style);
     }
@@ -549,12 +635,189 @@
         });
     }
 
+    // ── Live Comment Overlay ──
+
+    function createOverlayToggle() {
+        // Avoid duplicates
+        if (document.querySelector('.comments-overlay-toggle')) return;
+
+        var osd = document.querySelector('.videoOsdBottom');
+        if (!osd) return;
+
+        var controls = osd.querySelector('.osdControls');
+        if (!controls) return;
+
+        // Find the right-side button group (last direct child div of osdControls)
+        var children = controls.children;
+        var target = null;
+        for (var i = children.length - 1; i >= 0; i--) {
+            if (children[i].tagName === 'DIV' && children[i].querySelector('button')) {
+                target = children[i];
+                break;
+            }
+        }
+        if (!target) target = controls;
+
+        var btn = document.createElement('button');
+        btn.className = 'comments-overlay-toggle';
+        btn.title = 'Live Comments';
+        btn.innerHTML = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">'
+            + '<path d="M20 2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14l4 4V4c0-1.1-.9-2-2-2zm0 15.17L18.83 16H4V4h16v13.17zM7 9h2v2H7V9zm4 0h2v2h-2V9zm4 0h2v2h-2V9z"/>'
+            + '</svg>';
+
+        btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleOverlay();
+        });
+
+        target.appendChild(btn);
+    }
+
+    function toggleOverlay() {
+        overlayActive = !overlayActive;
+
+        var btn = document.querySelector('.comments-overlay-toggle');
+        if (btn) {
+            btn.classList.toggle('active', overlayActive);
+        }
+
+        if (overlayActive) {
+            showOverlay();
+        } else {
+            hideOverlay();
+        }
+    }
+
+    function showOverlay() {
+        if (overlayPanel) return;
+
+        var playerContainer = document.querySelector('.videoPlayerContainer');
+        if (!playerContainer) return;
+
+        // Ensure player container is positioned for absolute children
+        if (getComputedStyle(playerContainer).position === 'static') {
+            playerContainer.style.position = 'relative';
+        }
+
+        overlayPanel = document.createElement('div');
+        overlayPanel.className = 'comments-overlay-panel';
+        playerContainer.appendChild(overlayPanel);
+
+        // Fetch comments and start render loop
+        overlayShownIds = {};
+        overlayComments = [];
+        clearOverlayTimers();
+
+        if (currentMediaId) {
+            fetchComments(currentMediaId, function (comments) {
+                overlayComments = (comments || []).sort(function (a, b) {
+                    return a.PositionTicks - b.PositionTicks;
+                });
+                startOverlayRenderLoop();
+            });
+        }
+    }
+
+    function hideOverlay() {
+        if (overlayRenderTimer) {
+            clearInterval(overlayRenderTimer);
+            overlayRenderTimer = null;
+        }
+        clearOverlayTimers();
+        overlayShownIds = {};
+        overlayComments = [];
+
+        if (overlayPanel) {
+            overlayPanel.remove();
+            overlayPanel = null;
+        }
+    }
+
+    function clearOverlayTimers() {
+        for (var i = 0; i < overlayBubbleTimers.length; i++) {
+            clearTimeout(overlayBubbleTimers[i]);
+        }
+        overlayBubbleTimers = [];
+    }
+
+    function startOverlayRenderLoop() {
+        if (overlayRenderTimer) clearInterval(overlayRenderTimer);
+
+        overlayRenderTimer = setInterval(function () {
+            if (!overlayPanel || !overlayActive) return;
+
+            var video = document.querySelector('video');
+            if (!video || video.paused) return;
+
+            var now = currentPositionTicks;
+
+            for (var i = 0; i < overlayComments.length; i++) {
+                var c = overlayComments[i];
+                var id = c.Id || c.id;
+                var ticks = c.PositionTicks || c.positionTicks || 0;
+
+                if (overlayShownIds[id]) continue;
+
+                // Show comment if playback has reached its timestamp
+                // (within a small forward window so we don't miss any)
+                if (ticks <= now && ticks > now - 5000000) { // within 0.5s behind
+                    overlayShownIds[id] = true;
+                    spawnBubble(c);
+                }
+            }
+        }, 300);
+    }
+
+    function spawnBubble(comment) {
+        if (!overlayPanel) return;
+
+        var username = comment.Username || comment.username || '?';
+        var text = comment.Text || comment.text || '';
+
+        var bubble = document.createElement('div');
+        bubble.className = 'comments-overlay-bubble';
+        bubble.innerHTML = '<div class="comments-overlay-bubble-user">' + escapeHtml(username) + '</div>'
+            + '<div class="comments-overlay-bubble-text">' + escapeHtml(text) + '</div>';
+
+        overlayPanel.appendChild(bubble);
+
+        // Scroll to keep newest at bottom visible (push older up)
+        overlayPanel.scrollTop = overlayPanel.scrollHeight;
+
+        // TTL — fade out after 10s, then remove
+        var timer = setTimeout(function () {
+            bubble.classList.add('fade-out');
+            setTimeout(function () {
+                if (bubble.parentNode) {
+                    bubble.parentNode.removeChild(bubble);
+                }
+            }, 600); // match fade-out transition duration
+        }, OVERLAY_TTL);
+
+        overlayBubbleTimers.push(timer);
+    }
+
+    function resetOverlayForSeek() {
+        if (!overlayActive || !overlayPanel) return;
+
+        // Clear all visible bubbles
+        overlayPanel.innerHTML = '';
+        clearOverlayTimers();
+        overlayShownIds = {};
+    }
+
     function exitLayout() {
         var layout = document.getElementById('comments-layout');
         if (layout) layout.remove();
 
         var layoutStyle = document.getElementById('comments-layout-style');
         if (layoutStyle) layoutStyle.remove();
+
+        // Clean up overlay
+        hideOverlay();
+        var btn = document.querySelector('.comments-overlay-toggle');
+        if (btn) btn.remove();
 
         commentsInjected = false;
         playerActive = false;
@@ -564,10 +827,18 @@
     // ── Player Interception ──
 
     function trackPlaybackPosition() {
+        var lastPosition = 0;
         setInterval(function () {
             var video = document.querySelector('video');
             if (video && !isNaN(video.currentTime)) {
-                currentPositionTicks = Math.floor(video.currentTime * 10000000);
+                var newTicks = Math.floor(video.currentTime * 10000000);
+                // Detect seek — if position jumped more than 3 seconds
+                var delta = Math.abs(newTicks - lastPosition);
+                if (lastPosition > 0 && delta > 30000000) {
+                    resetOverlayForSeek();
+                }
+                lastPosition = newTicks;
+                currentPositionTicks = newTicks;
             }
         }, 500);
     }
@@ -853,8 +1124,6 @@
         var checkInterval = null;
 
         function tryInject() {
-            if (playerActive) return;
-
             var playerContainer = document.querySelector('.videoPlayerContainer');
             if (!playerContainer) return;
 
@@ -865,9 +1134,14 @@
             if (!video) return;
 
             // Phase 1: Show skeleton layout immediately when player container appears
-            if (!skeletonShown && !commentsInjected) {
+            if (!playerActive && !skeletonShown && !commentsInjected) {
                 showSkeletonLayout();
                 loadRealContent();
+            }
+
+            // Inject overlay toggle into OSD (retry until OSD is available)
+            if (!document.querySelector('.comments-overlay-toggle')) {
+                createOverlayToggle();
             }
         }
 

@@ -465,7 +465,7 @@
             html += '<div class="req-card-actions">';
             if (inLibrary) {
                 html += '<span class="req-badge req-badge-available">Already Available</span>';
-                html += ' <a class="req-btn req-btn-link" href="/web/#/details?id=' + escapeHtml(libraryMap[r.tmdbId]) + '">View in Jellyfin</a>';
+                html += ' <a class="req-btn req-btn-link req-view-link" href="/web/#/details?id=' + escapeHtml(libraryMap[r.tmdbId]) + '">View in Jellyfin</a>';
             } else if (alreadyRequested) {
                 html += '<span class="req-badge req-badge-pending">Already Requested</span>';
             } else {
@@ -476,6 +476,11 @@
         html += '</div>';
         container.innerHTML = html;
         loadAllAuthPosters(container);
+
+        // Close overlay when navigating to Jellyfin item
+        container.querySelectorAll('.req-view-link').forEach(function (link) {
+            link.addEventListener('click', function () { closeOverlay(); });
+        });
 
         // Bind request buttons
         container.querySelectorAll('.req-btn-primary[data-tmdb]').forEach(function (btn) {
@@ -555,6 +560,11 @@
         container.innerHTML = html;
         loadAllAuthPosters(container);
 
+        // Close overlay when navigating to Jellyfin item
+        container.querySelectorAll('.req-view-link').forEach(function (link) {
+            link.addEventListener('click', function () { closeOverlay(); });
+        });
+
         // Bind delete buttons
         container.querySelectorAll('.req-delete-btn').forEach(function (btn) {
             btn.addEventListener('click', function () {
@@ -593,7 +603,7 @@
         if (r.status === 'available') {
             html += '<span class="req-badge req-badge-available">Available</span>';
             if (r.jellyfinItemId) {
-                html += ' <a class="req-btn req-btn-link" href="/web/#/details?id=' + escapeHtml(r.jellyfinItemId) + '">View in Jellyfin</a>';
+                html += ' <a class="req-btn req-btn-link req-view-link" href="/web/#/details?id=' + escapeHtml(r.jellyfinItemId) + '">View in Jellyfin</a>';
             }
         } else {
             html += '<span class="req-badge req-badge-pending">Pending</span>';
